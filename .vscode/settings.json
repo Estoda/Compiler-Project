@@ -1,0 +1,15 @@
+{
+  "cSpell.ignoreWords": [
+    "atoi",
+    "prec",
+    "strcmp",
+    "strcpy",
+    "strdup",
+    "sval",
+    "yyerror",
+    "yylineno",
+    "yylval",
+    "yytext",
+    "yywrap"
+  ]
+}

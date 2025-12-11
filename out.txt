@@ -1,0 +1,3 @@
+Declared var[1] = 20
+Declared var[2] = 20
+If (false) -> then-block (evaluated false)
