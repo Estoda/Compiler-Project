@@ -1,7 +1,5 @@
 Declared var[1] = 20
 Assigned var[1] = 5
-If (false) -> then-block (evaluated false)
 Assigned var[1] = 2
 Assigned var[1] = 10
-If (true) -> then-block executed (with else)
 Print: 10

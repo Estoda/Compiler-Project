@@ -1,0 +1,39 @@
+INTEGER(20)
+DECLARATION
+|   int
+|   var
+|   expr
+INTEGER(3)
+INTEGER(4)
+CONDITION
+└──>
+└──INTEGER(5)
+└──ASSIGN
+└──└──var
+└──└──expr
+IF
+└──CONDITION
+└──└──false
+THEN
+END
+INTEGER(5)
+INTEGER(11)
+CONDITION
+└──<
+└──INTEGER(2)
+└──ASSIGN
+└──└──var
+└──└──expr
+└──INTEGER(10)
+└──ASSIGN
+└──└──var
+└──└──expr
+IF
+└──CONDITION
+└──└──true
+└──THEN
+ELSE
+END
+VAR(id=1)
+PRINT
+└──expr
