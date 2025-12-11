@@ -11,6 +11,7 @@ extern FILE* yyout;
 FILE* yyError = NULL;
 
 int sym[256]; /* enough for many vars (IDs assigned by scanner) */
+
 %}
 
 %union {
@@ -84,15 +85,15 @@ printStatement:
 
 /* If without else uses LOWER_ELSE to avoid dangling-else */
 IfStatement:
-      IF '(' condition ')' ':' block %prec LOWER_ELSE END
-      {
-          if ($3) fprintf(yyout, "If (true) -> then-block executed\n");
-          else     fprintf(yyout, "If (false) -> then-block (evaluated false)\n");
-      }
-    | IF '(' condition ')' ':' block ELSE ':' block END
+    IF '(' condition ')' ':' block ELSE ':' block END
       {
           if ($3) fprintf(yyout, "If (true) -> then-block executed (with else)\n");
           else     fprintf(yyout, "If (false) -> else-block executed\n");
+      }
+      | IF '(' condition ')' ':' block %prec LOWER_ELSE END
+      {
+          if ($3) fprintf(yyout, "If (true) -> then-block executed\n");
+          else     fprintf(yyout, "If (false) -> then-block (evaluated false)\n");
       }
     ;
 

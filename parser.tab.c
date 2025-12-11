@@ -82,7 +82,8 @@ FILE* yyError = NULL;
 
 int sym[256]; /* enough for many vars (IDs assigned by scanner) */
 
-#line 86 "parser.tab.c"
+
+#line 87 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -528,9 +529,9 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    44,    44,    48,    50,    54,    55,    56,    57,    58,
-      63,    71,    79,    87,    92,   101,   106,   124,   125,   126,
-     127,   128,   129,   130
+       0,    45,    45,    49,    51,    55,    56,    57,    58,    59,
+      64,    72,    80,    88,    93,   102,   107,   125,   126,   127,
+     128,   129,   130,   131
 };
 #endif
 
@@ -591,8 +592,8 @@ static const yytype_int8 yydefact[] =
        4,     5,     6,     7,     8,     0,     0,     0,     0,     0,
       18,     0,     0,     0,     0,     0,     9,     0,     0,     0,
        0,     0,    23,    19,    20,    21,    22,    11,     0,     0,
-       0,     0,    12,     3,    16,    10,    15,     0,     0,    13,
-       3,     0,    14
+       0,     0,    12,     3,    16,    10,    15,     0,     0,    14,
+       3,     0,    13
 };
 
 /* YYPGOTO[NTERM-NUM].  */
@@ -658,7 +659,7 @@ static const yytype_int8 yyr1[] =
 static const yytype_int8 yyr2[] =
 {
        0,     2,     1,     0,     2,     1,     1,     1,     1,     2,
-       5,     4,     5,     7,    10,     1,     3,     1,     1,     3,
+       5,     4,     5,    10,     7,     1,     3,     1,     1,     3,
        3,     3,     3,     3
 };
 
@@ -1123,57 +1124,57 @@ yyreduce:
   switch (yyn)
     {
   case 9: /* stmt: expr ';'  */
-#line 58 "parser.y"
+#line 59 "parser.y"
                      { fprintf(yyout, "%d\n", (yyvsp[-1].ival)); }
-#line 1129 "parser.tab.c"
+#line 1130 "parser.tab.c"
     break;
 
   case 10: /* declaration: INT VARIABLE '=' expr ';'  */
-#line 64 "parser.y"
+#line 65 "parser.y"
       {
           sym[(yyvsp[-3].ival)] = (yyvsp[-1].ival);
           fprintf(yyout, "Declared var[%d] = %d\n", (yyvsp[-3].ival), (yyvsp[-1].ival));
       }
-#line 1138 "parser.tab.c"
+#line 1139 "parser.tab.c"
     break;
 
   case 11: /* assignment: VARIABLE '=' expr ';'  */
-#line 72 "parser.y"
+#line 73 "parser.y"
       {
           sym[(yyvsp[-3].ival)] = (yyvsp[-1].ival);
           fprintf(yyout, "Assigned var[%d] = %d\n", (yyvsp[-3].ival), (yyvsp[-1].ival));
       }
-#line 1147 "parser.tab.c"
+#line 1148 "parser.tab.c"
     break;
 
   case 12: /* printStatement: PRINT '(' expr ')' ';'  */
-#line 80 "parser.y"
+#line 81 "parser.y"
       {
           fprintf(yyout, "Print: %d\n", (yyvsp[-2].ival));
       }
-#line 1155 "parser.tab.c"
+#line 1156 "parser.tab.c"
     break;
 
-  case 13: /* IfStatement: IF '(' condition ')' ':' block END  */
-#line 88 "parser.y"
-      {
-          if ((yyvsp[-4].ival)) fprintf(yyout, "If (true) -> then-block executed\n");
-          else     fprintf(yyout, "If (false) -> then-block (evaluated false)\n");
-      }
-#line 1164 "parser.tab.c"
-    break;
-
-  case 14: /* IfStatement: IF '(' condition ')' ':' block ELSE ':' block END  */
-#line 93 "parser.y"
+  case 13: /* IfStatement: IF '(' condition ')' ':' block ELSE ':' block END  */
+#line 89 "parser.y"
       {
           if ((yyvsp[-7].ival)) fprintf(yyout, "If (true) -> then-block executed (with else)\n");
           else     fprintf(yyout, "If (false) -> else-block executed\n");
       }
-#line 1173 "parser.tab.c"
+#line 1165 "parser.tab.c"
+    break;
+
+  case 14: /* IfStatement: IF '(' condition ')' ':' block END  */
+#line 94 "parser.y"
+      {
+          if ((yyvsp[-4].ival)) fprintf(yyout, "If (true) -> then-block executed\n");
+          else     fprintf(yyout, "If (false) -> then-block (evaluated false)\n");
+      }
+#line 1174 "parser.tab.c"
     break;
 
   case 16: /* condition: expr OP expr  */
-#line 107 "parser.y"
+#line 108 "parser.y"
       {
           char *op = (yyvsp[-1].sval);
           if (strcmp(op, "==") == 0)      (yyval.ival) = ((yyvsp[-2].ival) == (yyvsp[0].ival));
@@ -1187,53 +1188,53 @@ yyreduce:
               (yyval.ival) = 0;
           }
       }
-#line 1191 "parser.tab.c"
+#line 1192 "parser.tab.c"
     break;
 
   case 17: /* expr: INTEGER  */
-#line 124 "parser.y"
+#line 125 "parser.y"
                             { (yyval.ival) = (yyvsp[0].ival); }
-#line 1197 "parser.tab.c"
+#line 1198 "parser.tab.c"
     break;
 
   case 18: /* expr: VARIABLE  */
-#line 125 "parser.y"
+#line 126 "parser.y"
                             { (yyval.ival) = sym[(yyvsp[0].ival)]; }
-#line 1203 "parser.tab.c"
+#line 1204 "parser.tab.c"
     break;
 
   case 19: /* expr: expr '+' expr  */
-#line 126 "parser.y"
+#line 127 "parser.y"
                            { (yyval.ival) = (yyvsp[-2].ival) + (yyvsp[0].ival); }
-#line 1209 "parser.tab.c"
+#line 1210 "parser.tab.c"
     break;
 
   case 20: /* expr: expr '-' expr  */
-#line 127 "parser.y"
+#line 128 "parser.y"
                            { (yyval.ival) = (yyvsp[-2].ival) - (yyvsp[0].ival); }
-#line 1215 "parser.tab.c"
+#line 1216 "parser.tab.c"
     break;
 
   case 21: /* expr: expr '*' expr  */
-#line 128 "parser.y"
+#line 129 "parser.y"
                            { (yyval.ival) = (yyvsp[-2].ival) * (yyvsp[0].ival); }
-#line 1221 "parser.tab.c"
+#line 1222 "parser.tab.c"
     break;
 
   case 22: /* expr: expr '/' expr  */
-#line 129 "parser.y"
+#line 130 "parser.y"
                            { (yyval.ival) = (yyvsp[-2].ival) / (yyvsp[0].ival); }
-#line 1227 "parser.tab.c"
+#line 1228 "parser.tab.c"
     break;
 
   case 23: /* expr: '(' expr ')'  */
-#line 130 "parser.y"
+#line 131 "parser.y"
                            { (yyval.ival) = (yyvsp[-1].ival); }
-#line 1233 "parser.tab.c"
+#line 1234 "parser.tab.c"
     break;
 
 
-#line 1237 "parser.tab.c"
+#line 1238 "parser.tab.c"
 
       default: break;
     }
@@ -1426,7 +1427,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 133 "parser.y"
+#line 134 "parser.y"
 
 
 void yyerror(char *s) {
