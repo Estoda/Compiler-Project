@@ -69,43 +69,278 @@
 /* First part of user prologue.  */
 #line 1 "parser.y"
 
+/*
+  parser.y — Statements & correct if/else execution
+
+  Behaviors:
+  - Build statement trees during parsing (no execution during parse)
+  - After parsing the whole program, execute top-level statements (program -> stmts { execute_list($1); })
+  - Blocks inside if/else are kept as stmt-lists and only executed according to condition
+  - Printing of parse-trees goes to tree.txt at execution time
+  - Runtime outputs (Declared..., Assigned..., Print...) go to out.txt
+  - Errors go to outError.txt
+*/
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int yylex(void);
 void yyerror(char *);
+
 extern int yylineno;
 extern FILE* yyin;
 extern FILE* yyout;
 FILE* yytree = NULL;
 FILE* yyError = NULL;
 
-int sym[256]; /* enough for many vars (IDs assigned by scanner) */
+/* symbol table: variables are represented by integer IDs provided by scanner */
+int sym[256];
 
-#define MAX_DEPTH 256
-char prefix[MAX_DEPTH][16];
-int depth = 0;
+/* Node kinds */
+enum {
+    N_UNKNOWN = 0,
+    N_INT,
+    N_VAR,
+    N_OP,       /* arithmetic or comparison operator node */
+    N_DECL,     /* declaration (dec) */
+    N_ASSIGN,   /* assign */
+    N_PRINT,    /* print */
+    N_IF,       /* if */
+    N_BRANCHES, /* helper node with then/else as children */
+    N_STMTLIST  /* linked list tree of statements: left = previous list, right = stmt */
+};
 
-void pushPrefix(const char* p)
-{
-    strcpy(prefix[depth], p);
-    depth++;
+/* ---- Node definition ---- */
+typedef struct Node {
+    char *label;          /* human-readable label (operator or node name) */
+    struct Node *left;
+    struct Node *right;
+    int kind;
+    int int_value;        /* for integer literal */
+    int var_id;           /* for variable nodes */
+} Node;
+
+/* helpers to create nodes */
+Node* new_node_kind(const char *label, int kind, Node *left, Node *right) {
+    Node *n = (Node*)malloc(sizeof(Node));
+    if (!n) { perror("malloc"); exit(1); }
+    n->label = strdup(label ? label : "");
+    n->left = left;
+    n->right = right;
+    n->kind = kind;
+    n->int_value = 0;
+    n->var_id = -1;
+    return n;
 }
 
-void popPrefix() {
-    depth--;
+Node* new_int_node(int v) {
+    Node *n = new_node_kind(NULL, N_INT, NULL, NULL);
+    {
+        char buf[64];
+        sprintf(buf, "INTEGER(%d)", v);
+        free(n->label);
+        n->label = strdup(buf);
+    }
+    n->int_value = v;
+    return n;
 }
 
-void printTreeNode(const char* label)
-{
-    for(int i = 0; i < depth; i++)
-        fprintf(yytree, "%s", prefix[i]);
-    
-    fprintf(yytree, "%s\n", label);
+Node* new_var_node(int id) {
+    Node *n = new_node_kind(NULL, N_VAR, NULL, NULL);
+    {
+        char buf[64];
+        sprintf(buf, "VAR(id=%d)", id);
+        free(n->label);
+        n->label = strdup(buf);
+    }
+    n->var_id = id;
+    return n;
+}
+
+Node* new_op_node(const char *op, Node *l, Node *r) {
+    Node *n = new_node_kind(op, N_OP, l, r);
+    return n;
+}
+
+Node* new_decl_node(Node *varNode, Node *exprNode) {
+    return new_node_kind("dec", N_DECL, varNode, exprNode);
+}
+
+Node* new_assign_node(Node *varNode, Node *exprNode) {
+    return new_node_kind("assign", N_ASSIGN, varNode, exprNode);
+}
+
+Node* new_print_node(Node *exprNode) {
+    return new_node_kind("print", N_PRINT, exprNode, NULL);
+}
+
+Node* new_if_node(Node *cond, Node *thenList, Node *elseList) {
+    Node *branches = new_node_kind("branches", N_BRANCHES, thenList, elseList);
+    return new_node_kind("if", N_IF, cond, branches);
+}
+
+Node* new_stmtlist_node(Node *prevList, Node *stmt) {
+    return new_node_kind("stmtlist", N_STMTLIST, prevList, stmt);
+}
+
+/* free tree */
+void free_tree(Node *n) {
+    if (!n) return;
+    free_tree(n->left);
+    free_tree(n->right);
+    if (n->label) free(n->label);
+    free(n);
+}
+
+/* ---- printing rotated vertical tree to yytree (like doctor style) ---- */
+void printTreeVertical(Node *root, int space) {
+    if (root == NULL) return;
+    int spacing_per_level = 5;
+    space += spacing_per_level;
+
+    printTreeVertical(root->right, space);
+
+    fprintf(yytree, "\n");
+    for (int i = spacing_per_level; i < space; i++)
+        fprintf(yytree, " ");
+    fprintf(yytree, "%s\n", root->label);
+
+    printTreeVertical(root->left, space);
+}
+
+/* print top-level separation */
+void print_tree_header(Node *n) {
+    if (!n) return;
+    printTreeVertical(n, 0);
+    fprintf(yytree, "\n--------------------------------------------------\n\n");
+}
+
+/* ---- evaluation of expressions at execution time ---- */
+int eval_expr(Node *n) {
+    if (!n) return 0;
+    switch (n->kind) {
+        case N_INT:
+            return n->int_value;
+        case N_VAR:
+            if (n->var_id >=0 && n->var_id < 256) return sym[n->var_id];
+            return 0;
+        case N_OP: {
+            int L = eval_expr(n->left);
+            int R = eval_expr(n->right);
+            /* arithmetic */
+            if (strcmp(n->label, "+") == 0) return L + R;
+            if (strcmp(n->label, "-") == 0) return L - R;
+            if (strcmp(n->label, "*") == 0) return L * R;
+            if (strcmp(n->label, "/") == 0) {
+                if (R == 0) { yyerror("Division by zero"); return 0; }
+                return L / R;
+            }
+            /* comparisons -> return 0/1 */
+            if (strcmp(n->label, "==") == 0) return (L == R);
+            if (strcmp(n->label, "!=") == 0) return (L != R);
+            if (strcmp(n->label, "<=") == 0) return (L <= R);
+            if (strcmp(n->label, ">=") == 0) return (L >= R);
+            if (strcmp(n->label, "<") == 0) return (L < R);
+            if (strcmp(n->label, ">") == 0) return (L > R);
+            /* unknown op */
+            yyerror("Unknown operator in eval_expr");
+            return 0;
+        }
+        default:
+            yyerror("eval_expr: expected expression node");
+            return 0;
+    }
+}
+
+/* Forward declarations */
+void execute_stmt(Node *stmt);
+void execute_list(Node *list);
+
+/* execute a single statement node */
+void execute_stmt(Node *stmt) {
+    if (!stmt) return;
+
+    /* Print the statement tree to tree.txt before executing (so tree.txt reflects executed statements) */
+    print_tree_header(stmt);
+
+    switch (stmt->kind) {
+        case N_DECL: {
+            /* left is var node, right is expression node */
+            Node *varNode = stmt->left;
+            Node *exprNode = stmt->right;
+            int val = eval_expr(exprNode);
+            if (varNode->kind == N_VAR) {
+                int id = varNode->var_id;
+                sym[id] = val;
+                fprintf(yyout, "Declared var[%d] = %d\n", id, val);
+            } else {
+                yyerror("Declaration left side is not a variable");
+            }
+            break;
+        }
+        case N_ASSIGN: {
+            Node *varNode = stmt->left;
+            Node *exprNode = stmt->right;
+            int val = eval_expr(exprNode);
+            if (varNode->kind == N_VAR) {
+                int id = varNode->var_id;
+                sym[id] = val;
+                fprintf(yyout, "Assigned var[%d] = %d\n", id, val);
+            } else {
+                yyerror("Assignment left side is not a variable");
+            }
+            break;
+        }
+        case N_PRINT: {
+            Node *exprNode = stmt->left;
+            int val = eval_expr(exprNode);
+            fprintf(yyout, "Print: %d\n", val);
+            break;
+        }
+        case N_IF: {
+            Node *cond = stmt->left;
+            Node *branches = stmt->right; /* branches node: left=thenList, right=elseList */
+            int cond_val = eval_expr(cond);
+            if (branches && branches->kind == N_BRANCHES) {
+                Node *thenList = branches->left;
+                Node *elseList = branches->right;
+                if (cond_val) {
+                    execute_list(thenList);
+                } else {
+                    execute_list(elseList);
+                }
+            } else {
+                yyerror("If branches malformed");
+            }
+            break;
+        }
+        case N_STMTLIST: {
+            /* If accidentally a stmtlist passed directly, execute it */
+            execute_list(stmt);
+            break;
+        }
+        default:
+            yyerror("Unknown statement kind in execute_stmt");
+            break;
+    }
+}
+
+/* execute a list-of-statements node (stmtlist) */
+void execute_list(Node *list) {
+    if (!list) return;
+    if (list->kind == N_STMTLIST) {
+        /* left may be previous list (or NULL), right is a statement */
+        execute_list(list->left);
+        execute_stmt(list->right);
+    } else {
+        /* single statement */
+        execute_stmt(list);
+    }
 }
 
 
-#line 109 "parser.tab.c"
+#line 344 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -163,9 +398,8 @@ enum yysymbol_kind_t
   YYSYMBOL_printStatement = 27,            /* printStatement  */
   YYSYMBOL_IfStatement = 28,               /* IfStatement  */
   YYSYMBOL_block = 29,                     /* block  */
-  YYSYMBOL_30_1 = 30,                      /* $@1  */
-  YYSYMBOL_condition = 31,                 /* condition  */
-  YYSYMBOL_expr = 32                       /* expr  */
+  YYSYMBOL_condition = 30,                 /* condition  */
+  YYSYMBOL_expr = 31                       /* expr  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -493,16 +727,16 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  3
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   70
+#define YYLAST   69
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  21
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  12
+#define YYNNTS  11
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  24
+#define YYNRULES  23
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  54
+#define YYNSTATES  53
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   266
@@ -550,11 +784,11 @@ static const yytype_int8 yytranslate[] =
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_uint8 yyrline[] =
+static const yytype_int16 yyrline[] =
 {
-       0,    67,    67,    71,    73,    77,    78,    79,    80,    81,
-      86,   100,   114,   127,   149,   166,   166,   177,   202,   208,
-     214,   215,   216,   217,   218
+       0,   304,   304,   313,   314,   327,   328,   329,   330,   331,
+     339,   350,   360,   369,   374,   383,   391,   402,   406,   410,
+     414,   418,   422,   426
 };
 #endif
 
@@ -574,7 +808,7 @@ static const char *const yytname[] =
   "PRINT", "IF", "ELSE", "INT", "END", "OP", "LOWER_ELSE", "'='", "'+'",
   "'-'", "'*'", "'/'", "';'", "'('", "')'", "':'", "$accept", "program",
   "stmts", "stmt", "declaration", "assignment", "printStatement",
-  "IfStatement", "block", "$@1", "condition", "expr", YY_NULLPTR
+  "IfStatement", "block", "condition", "expr", YY_NULLPTR
 };
 
 static const char *
@@ -602,8 +836,8 @@ static const yytype_int8 yypact[] =
      -10,   -10,   -10,   -10,   -10,    32,    -1,    -1,    -1,    20,
      -10,    11,    -1,    -1,    -1,    -1,   -10,    37,    21,    45,
       28,    -1,   -10,    -5,    -5,   -10,   -10,   -10,    22,    46,
-      -1,    42,   -10,   -10,    47,   -10,    -3,   -10,    48,   -10,
-      15,   -10,    56,   -10
+      -1,    42,   -10,   -10,    47,   -10,    15,    -3,    48,   -10,
+     -10,    56,   -10
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -611,26 +845,26 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       3,     0,     2,     1,    18,    19,     0,     0,     0,     0,
+       3,     0,     2,     1,    17,    18,     0,     0,     0,     0,
        4,     5,     6,     7,     8,     0,     0,     0,     0,     0,
-      19,     0,     0,     0,     0,     0,     9,     0,     0,     0,
-       0,     0,    24,    20,    21,    22,    23,    11,     0,     0,
-       0,     0,    12,    15,    17,    10,     0,     3,     0,    14,
-      16,    15,     0,    13
+      18,     0,     0,     0,     0,     0,     9,     0,     0,     0,
+       0,     0,    23,    19,    20,    21,    22,    11,     0,     0,
+       0,     0,    12,     3,    16,    10,    15,     0,     0,    14,
+       3,     0,    13
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -10,   -10,    23,   -10,   -10,   -10,   -10,   -10,    16,   -10,
-     -10,    -9
+     -10,   -10,    67,   -10,   -10,   -10,   -10,   -10,    19,   -10,
+      -9
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     1,     2,    10,    11,    12,    13,    14,    46,    47,
-      29,    15
+       0,     1,    46,    10,    11,    12,    13,    14,    47,    29,
+      15
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -644,8 +878,7 @@ static const yytype_int8 yytable[] =
       32,    44,    31,     9,    22,    23,    24,    25,    40,    42,
       38,    22,    23,    24,    25,    22,    23,    24,    25,    26,
       22,    23,    24,    25,    37,    22,    23,    24,    25,    45,
-      22,    23,    24,    25,    39,    53,    43,    52,    51,     0,
-      50
+      22,    23,    24,    25,    39,    52,    43,     2,    50,    51
 };
 
 static const yytype_int8 yycheck[] =
@@ -656,8 +889,7 @@ static const yytype_int8 yycheck[] =
       19,    40,    12,    18,    13,    14,    15,    16,    10,    17,
       19,    13,    14,    15,    16,    13,    14,    15,    16,    17,
       13,    14,    15,    16,    17,    13,    14,    15,    16,    17,
-      13,    14,    15,    16,    19,     9,    20,    51,    20,    -1,
-      47
+      13,    14,    15,    16,    19,     9,    20,     0,    20,    50
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -665,27 +897,27 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,    22,    23,     0,     3,     4,     5,     6,     8,    18,
-      24,    25,    26,    27,    28,    32,    12,    18,    18,     4,
-       4,    32,    13,    14,    15,    16,    17,    32,    32,    31,
-      32,    12,    19,    32,    32,    32,    32,    17,    19,    19,
-      10,    32,    17,    20,    32,    17,    29,    30,     7,     9,
-      23,    20,    29,     9
+      24,    25,    26,    27,    28,    31,    12,    18,    18,     4,
+       4,    31,    13,    14,    15,    16,    17,    31,    31,    30,
+      31,    12,    19,    31,    31,    31,    31,    17,    19,    19,
+      10,    31,    17,    20,    31,    17,    23,    29,     7,     9,
+      20,    29,     9
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
        0,    21,    22,    23,    23,    24,    24,    24,    24,    24,
-      25,    26,    27,    28,    28,    30,    29,    31,    32,    32,
-      32,    32,    32,    32,    32
+      25,    26,    27,    28,    28,    29,    30,    31,    31,    31,
+      31,    31,    31,    31
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     1,     0,     2,     1,     1,     1,     1,     2,
-       5,     4,     5,    10,     7,     0,     2,     3,     1,     1,
-       3,     3,     3,     3,     3
+       5,     4,     5,    10,     7,     1,     3,     1,     1,     3,
+       3,     3,     3,     3
 };
 
 
@@ -1148,193 +1380,193 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
+  case 2: /* program: stmts  */
+#line 305 "parser.y"
+      {
+          /* execute top-level statements after parsing */
+          execute_list((yyvsp[0].node));
+      }
+#line 1390 "parser.tab.c"
+    break;
+
+  case 3: /* stmts: %empty  */
+#line 313 "parser.y"
+                    { (yyval.node) = NULL; }
+#line 1396 "parser.tab.c"
+    break;
+
+  case 4: /* stmts: stmts stmt  */
+#line 314 "parser.y"
+                    {
+                        /* append stmt to list: if $1 == NULL return stmt as list node or create list node */
+                        if ((yyvsp[-1].node) == NULL) {
+                            /* treat single stmt as list (we still wrap it into a stmtlist node to be uniform) */
+                            (yyval.node) = new_stmtlist_node(NULL, (yyvsp[0].node));
+                        } else {
+                            (yyval.node) = new_stmtlist_node((yyvsp[-1].node), (yyvsp[0].node));
+                        }
+                    }
+#line 1410 "parser.tab.c"
+    break;
+
+  case 5: /* stmt: declaration  */
+#line 327 "parser.y"
+                   { (yyval.node) = (yyvsp[0].node); }
+#line 1416 "parser.tab.c"
+    break;
+
+  case 6: /* stmt: assignment  */
+#line 328 "parser.y"
+                   { (yyval.node) = (yyvsp[0].node); }
+#line 1422 "parser.tab.c"
+    break;
+
+  case 7: /* stmt: printStatement  */
+#line 329 "parser.y"
+                     { (yyval.node) = (yyvsp[0].node); }
+#line 1428 "parser.tab.c"
+    break;
+
+  case 8: /* stmt: IfStatement  */
+#line 330 "parser.y"
+                   { (yyval.node) = (yyvsp[0].node); }
+#line 1434 "parser.tab.c"
+    break;
+
   case 9: /* stmt: expr ';'  */
-#line 81 "parser.y"
-                     { printTreeNode("EXPR_STMT");fprintf(yyout, "%d\n", (yyvsp[-1].ival)); }
-#line 1155 "parser.tab.c"
+#line 331 "parser.y"
+                   { /* expression statement: evaluate at execution time; wrap as a print of value? we keep it as an expr node to be executed as printing its value */
+                      /* We'll wrap it in a print-like node to keep execution consistent: a "printexpr" -> we'll use N_PRINT with left = expr */
+                      (yyval.node) = new_print_node((yyvsp[-1].node));
+                    }
+#line 1443 "parser.tab.c"
     break;
 
   case 10: /* declaration: INT VARIABLE '=' expr ';'  */
-#line 87 "parser.y"
+#line 340 "parser.y"
       {
-          printTreeNode("DECLARATION");
-          pushPrefix("|   "); printTreeNode("int");
-          printTreeNode("var");
-          printTreeNode("expr");
-          popPrefix();
-
-          sym[(yyvsp[-3].ival)] = (yyvsp[-1].ival);
-          fprintf(yyout, "Declared var[%d] = %d\n", (yyvsp[-3].ival), (yyvsp[-1].ival));
+          /* var node with id */
+          Node *varNode = new_var_node((yyvsp[-3].ival));
+          Node *dec = new_decl_node(varNode, (yyvsp[-1].node));
+          (yyval.node) = dec;
       }
-#line 1170 "parser.tab.c"
+#line 1454 "parser.tab.c"
     break;
 
   case 11: /* assignment: VARIABLE '=' expr ';'  */
-#line 101 "parser.y"
+#line 351 "parser.y"
       {
-          printTreeNode("ASSIGN");
-          pushPrefix("└──");
-          printTreeNode("var");
-          printTreeNode("expr");
-          popPrefix();
-
-          sym[(yyvsp[-3].ival)] = (yyvsp[-1].ival);
-          fprintf(yyout, "Assigned var[%d] = %d\n", (yyvsp[-3].ival), (yyvsp[-1].ival));
+          Node *varNode = new_var_node((yyvsp[-3].ival));
+          Node *asn = new_assign_node(varNode, (yyvsp[-1].node));
+          (yyval.node) = asn;
       }
-#line 1185 "parser.tab.c"
+#line 1464 "parser.tab.c"
     break;
 
   case 12: /* printStatement: PRINT '(' expr ')' ';'  */
-#line 115 "parser.y"
+#line 361 "parser.y"
       {
-          printTreeNode("PRINT");
-          pushPrefix("└──");
-          printTreeNode("expr");
-          popPrefix();
-
-          fprintf(yyout, "Print: %d\n", (yyvsp[-2].ival));
+          Node *p = new_print_node((yyvsp[-2].node));
+          (yyval.node) = p;
       }
-#line 1198 "parser.tab.c"
+#line 1473 "parser.tab.c"
     break;
 
   case 13: /* IfStatement: IF '(' condition ')' ':' block ELSE ':' block END  */
-#line 128 "parser.y"
+#line 370 "parser.y"
       {
-          printTreeNode("IF");
-          
-          /* CONDITION subtree */
-          pushPrefix("└──");
-            printTreeNode("CONDITION");
-            pushPrefix("└──");
-                printTreeNode((yyvsp[-7].ival) ? "true" : "false");
-            popPrefix();
-          popPrefix();
-
-          /* THEN block */
-          pushPrefix("└──");
-            printTreeNode("THEN");
-          popPrefix();
-
-          /* ELSE block */
-          printTreeNode("ELSE");
-
-          printTreeNode("END");
+          Node *ifn = new_if_node((yyvsp[-7].node), (yyvsp[-4].node), (yyvsp[-1].node));
+          (yyval.node) = ifn;
       }
-#line 1224 "parser.tab.c"
+#line 1482 "parser.tab.c"
     break;
 
   case 14: /* IfStatement: IF '(' condition ')' ':' block END  */
-#line 150 "parser.y"
+#line 375 "parser.y"
       {
-          printTreeNode("IF");
-          pushPrefix("└──");
-            printTreeNode("CONDITION");
-            pushPrefix("└──");
-                printTreeNode((yyvsp[-4].ival) ? "true" : "false");
-            popPrefix();
-          popPrefix();
-
-          printTreeNode("THEN");
-          printTreeNode("END");
+          Node *ifn = new_if_node((yyvsp[-4].node), (yyvsp[-1].node), NULL);
+          (yyval.node) = ifn;
       }
-#line 1241 "parser.tab.c"
+#line 1491 "parser.tab.c"
     break;
 
-  case 15: /* $@1: %empty  */
-#line 166 "parser.y"
-    {
-          pushPrefix("└──");
-    }
-#line 1249 "parser.tab.c"
-    break;
-
-  case 16: /* block: $@1 stmts  */
-#line 170 "parser.y"
-    {
-          popPrefix();
-    }
-#line 1257 "parser.tab.c"
-    break;
-
-  case 17: /* condition: expr OP expr  */
-#line 178 "parser.y"
+  case 15: /* block: stmts  */
+#line 384 "parser.y"
       {
-          printTreeNode("CONDITION");
-          pushPrefix("└──");
-
-          printTreeNode((yyvsp[-1].sval));
-
-          popPrefix();
-
-          char *op = (yyvsp[-1].sval);
-          if (strcmp(op, "==") == 0)      (yyval.ival) = ((yyvsp[-2].ival) == (yyvsp[0].ival));
-          else if (strcmp(op, "!=") == 0) (yyval.ival) = ((yyvsp[-2].ival) != (yyvsp[0].ival));
-          else if (strcmp(op, "<=") == 0) (yyval.ival) = ((yyvsp[-2].ival) <= (yyvsp[0].ival));
-          else if (strcmp(op, ">=") == 0) (yyval.ival) = ((yyvsp[-2].ival) >= (yyvsp[0].ival));
-          else if (strcmp(op, "<") == 0)  (yyval.ival) = ((yyvsp[-2].ival) <  (yyvsp[0].ival));
-          else if (strcmp(op, ">") == 0)  (yyval.ival) = ((yyvsp[-2].ival) >  (yyvsp[0].ival));
-          else {
-              yyerror("Unknown operator");
-              (yyval.ival) = 0;
-          }
+          (yyval.node) = (yyvsp[0].node);  /* block is simply the stmtlist produced */
       }
-#line 1282 "parser.tab.c"
+#line 1499 "parser.tab.c"
     break;
 
-  case 18: /* expr: INTEGER  */
-#line 202 "parser.y"
-                {
-          char buf[64];
-          sprintf(buf, "INTEGER(%d)", (yyvsp[0].ival));
-          printTreeNode(buf);
-          (yyval.ival) = (yyvsp[0].ival);
+  case 16: /* condition: expr OP expr  */
+#line 392 "parser.y"
+      {
+          /* OP is a string (lexer must strdup) */
+          (yyval.node) = new_op_node((yyvsp[-1].sval), (yyvsp[-2].node), (yyvsp[0].node));
+          /* We do not evaluate now; evaluation happens at run-time via eval_expr */
+          free((yyvsp[-1].sval)); /* free strdup from lexer to avoid leak */
       }
-#line 1293 "parser.tab.c"
+#line 1510 "parser.tab.c"
     break;
 
-  case 19: /* expr: VARIABLE  */
-#line 208 "parser.y"
-                            {
-                  char buf[64];
-          sprintf(buf, "VAR(id=%d)", (yyvsp[0].ival));
-          printTreeNode(buf);
-          (yyval.ival) = sym[(yyvsp[0].ival)];
-    }
-#line 1304 "parser.tab.c"
+  case 17: /* expr: INTEGER  */
+#line 403 "parser.y"
+      {
+          (yyval.node) = new_int_node((yyvsp[0].ival));
+      }
+#line 1518 "parser.tab.c"
     break;
 
-  case 20: /* expr: expr '+' expr  */
-#line 214 "parser.y"
-                           { printTreeNode("+");(yyval.ival) = (yyvsp[-2].ival) + (yyvsp[0].ival); }
-#line 1310 "parser.tab.c"
+  case 18: /* expr: VARIABLE  */
+#line 407 "parser.y"
+      {
+          (yyval.node) = new_var_node((yyvsp[0].ival));
+      }
+#line 1526 "parser.tab.c"
     break;
 
-  case 21: /* expr: expr '-' expr  */
-#line 215 "parser.y"
-                           { printTreeNode("-");(yyval.ival) = (yyvsp[-2].ival) - (yyvsp[0].ival); }
-#line 1316 "parser.tab.c"
+  case 19: /* expr: expr '+' expr  */
+#line 411 "parser.y"
+      {
+          (yyval.node) = new_op_node("+", (yyvsp[-2].node), (yyvsp[0].node));
+      }
+#line 1534 "parser.tab.c"
     break;
 
-  case 22: /* expr: expr '*' expr  */
-#line 216 "parser.y"
-                           { printTreeNode("*");(yyval.ival) = (yyvsp[-2].ival) * (yyvsp[0].ival); }
-#line 1322 "parser.tab.c"
+  case 20: /* expr: expr '-' expr  */
+#line 415 "parser.y"
+      {
+          (yyval.node) = new_op_node("-", (yyvsp[-2].node), (yyvsp[0].node));
+      }
+#line 1542 "parser.tab.c"
     break;
 
-  case 23: /* expr: expr '/' expr  */
-#line 217 "parser.y"
-                           { printTreeNode("/");(yyval.ival) = (yyvsp[-2].ival) / (yyvsp[0].ival); }
-#line 1328 "parser.tab.c"
+  case 21: /* expr: expr '*' expr  */
+#line 419 "parser.y"
+      {
+          (yyval.node) = new_op_node("*", (yyvsp[-2].node), (yyvsp[0].node));
+      }
+#line 1550 "parser.tab.c"
     break;
 
-  case 24: /* expr: '(' expr ')'  */
-#line 218 "parser.y"
-                           { printTreeNode("(expr)");(yyval.ival) = (yyvsp[-1].ival); }
-#line 1334 "parser.tab.c"
+  case 22: /* expr: expr '/' expr  */
+#line 423 "parser.y"
+      {
+          (yyval.node) = new_op_node("/", (yyvsp[-2].node), (yyvsp[0].node));
+      }
+#line 1558 "parser.tab.c"
+    break;
+
+  case 23: /* expr: '(' expr ')'  */
+#line 427 "parser.y"
+      {
+          (yyval.node) = (yyvsp[-1].node);
+      }
+#line 1566 "parser.tab.c"
     break;
 
 
-#line 1338 "parser.tab.c"
+#line 1570 "parser.tab.c"
 
       default: break;
     }
@@ -1527,19 +1759,22 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 221 "parser.y"
+#line 432 "parser.y"
 
 
+/* error reporting */
 void yyerror(char *s) {
     if (!yyError) yyError = stderr;
     fprintf(yyError, "Error: %s at line %d\n", s, yylineno);
 }
 
+/* main: open files and run parser */
 int main(void) {
     yyin = fopen("in.txt", "r");
     yyout = fopen("out.txt", "w");
     yytree = fopen("tree.txt", "w");
     yyError = fopen("outError.txt", "w");
+
     if (!yyin) { perror("open in.txt"); return 1; }
     if (!yyout) { perror("open out.txt"); return 1; }
     if (!yytree) { perror("open tree.txt"); return 1; }

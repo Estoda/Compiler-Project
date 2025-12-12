@@ -1,13 +1,7 @@
 int x = 20;
 
 if (3 > 4):
-    x = 5;
+    int y = 20;
 end
 
-if (5 < 11 ):
-    x = 2;
-else:
-    x = 10;
-end
 
-print(x);
