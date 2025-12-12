@@ -97,6 +97,8 @@ FILE* yyError = NULL;
 /* symbol table: variables are represented by integer IDs provided by scanner */
 int sym[256];
 
+int runtime_error = 0;
+
 /* Node kinds */
 enum {
     N_UNKNOWN = 0,
@@ -196,6 +198,14 @@ void free_tree(Node *n) {
 /* ---- printing rotated vertical tree to yytree (like doctor style) ---- */
 void printTreeVertical(Node *root, int space) {
     if (root == NULL) return;
+
+    if(root->kind == N_STMTLIST)
+    {
+        printTreeVertical(root->left, space);
+        printTreeVertical(root->right, space);
+        return;
+    }
+
     int spacing_per_level = 5;
     space += spacing_per_level;
 
@@ -212,6 +222,14 @@ void printTreeVertical(Node *root, int space) {
 /* print top-level separation */
 void print_tree_header(Node *n) {
     if (!n) return;
+
+    if(n->kind == N_STMTLIST)
+    {
+        print_tree_header(n->left);
+        print_tree_header(n->right);
+        return;
+    }
+
     printTreeVertical(n, 0);
     fprintf(yytree, "\n--------------------------------------------------\n\n");
 }
@@ -233,7 +251,7 @@ int eval_expr(Node *n) {
             if (strcmp(n->label, "-") == 0) return L - R;
             if (strcmp(n->label, "*") == 0) return L * R;
             if (strcmp(n->label, "/") == 0) {
-                if (R == 0) { yyerror("Division by zero"); return 0; }
+                if (R == 0) { yyerror("Division by zero"); runtime_error = 1; return 0; }
                 return L / R;
             }
             /* comparisons -> return 0/1 */
@@ -260,6 +278,7 @@ void execute_list(Node *list);
 /* execute a single statement node */
 void execute_stmt(Node *stmt) {
     if (!stmt) return;
+    
 
     /* Print the statement tree to tree.txt before executing (so tree.txt reflects executed statements) */
     print_tree_header(stmt);
@@ -267,6 +286,9 @@ void execute_stmt(Node *stmt) {
     switch (stmt->kind) {
         case N_DECL: {
             /* left is var node, right is expression node */
+            runtime_error = 0;
+            int v = eval_expr(stmt->right);
+            if (runtime_error) return;
             Node *varNode = stmt->left;
             Node *exprNode = stmt->right;
             int val = eval_expr(exprNode);
@@ -280,6 +302,9 @@ void execute_stmt(Node *stmt) {
             break;
         }
         case N_ASSIGN: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->right);
+            if (runtime_error) return;
             Node *varNode = stmt->left;
             Node *exprNode = stmt->right;
             int val = eval_expr(exprNode);
@@ -293,12 +318,18 @@ void execute_stmt(Node *stmt) {
             break;
         }
         case N_PRINT: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->left);
+            if (runtime_error) return;
             Node *exprNode = stmt->left;
             int val = eval_expr(exprNode);
             fprintf(yyout, "Print: %d\n", val);
             break;
         }
         case N_IF: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->left);
+            if (runtime_error) return;
             Node *cond = stmt->left;
             Node *branches = stmt->right; /* branches node: left=thenList, right=elseList */
             int cond_val = eval_expr(cond);
@@ -340,7 +371,7 @@ void execute_list(Node *list) {
 }
 
 
-#line 344 "parser.tab.c"
+#line 375 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -786,9 +817,9 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   304,   304,   313,   314,   327,   328,   329,   330,   331,
-     339,   350,   360,   369,   374,   383,   391,   402,   406,   410,
-     414,   418,   422,   426
+       0,   335,   335,   344,   345,   358,   359,   360,   361,   362,
+     370,   381,   391,   400,   405,   414,   422,   433,   437,   441,
+     445,   449,   453,   457
 };
 #endif
 
@@ -1381,22 +1412,22 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* program: stmts  */
-#line 305 "parser.y"
+#line 336 "parser.y"
       {
           /* execute top-level statements after parsing */
           execute_list((yyvsp[0].node));
       }
-#line 1390 "parser.tab.c"
+#line 1421 "parser.tab.c"
     break;
 
   case 3: /* stmts: %empty  */
-#line 313 "parser.y"
+#line 344 "parser.y"
                     { (yyval.node) = NULL; }
-#line 1396 "parser.tab.c"
+#line 1427 "parser.tab.c"
     break;
 
   case 4: /* stmts: stmts stmt  */
-#line 314 "parser.y"
+#line 345 "parser.y"
                     {
                         /* append stmt to list: if $1 == NULL return stmt as list node or create list node */
                         if ((yyvsp[-1].node) == NULL) {
@@ -1406,167 +1437,167 @@ yyreduce:
                             (yyval.node) = new_stmtlist_node((yyvsp[-1].node), (yyvsp[0].node));
                         }
                     }
-#line 1410 "parser.tab.c"
+#line 1441 "parser.tab.c"
     break;
 
   case 5: /* stmt: declaration  */
-#line 327 "parser.y"
+#line 358 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
-#line 1416 "parser.tab.c"
+#line 1447 "parser.tab.c"
     break;
 
   case 6: /* stmt: assignment  */
-#line 328 "parser.y"
+#line 359 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
-#line 1422 "parser.tab.c"
+#line 1453 "parser.tab.c"
     break;
 
   case 7: /* stmt: printStatement  */
-#line 329 "parser.y"
+#line 360 "parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
-#line 1428 "parser.tab.c"
+#line 1459 "parser.tab.c"
     break;
 
   case 8: /* stmt: IfStatement  */
-#line 330 "parser.y"
+#line 361 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
-#line 1434 "parser.tab.c"
+#line 1465 "parser.tab.c"
     break;
 
   case 9: /* stmt: expr ';'  */
-#line 331 "parser.y"
+#line 362 "parser.y"
                    { /* expression statement: evaluate at execution time; wrap as a print of value? we keep it as an expr node to be executed as printing its value */
                       /* We'll wrap it in a print-like node to keep execution consistent: a "printexpr" -> we'll use N_PRINT with left = expr */
                       (yyval.node) = new_print_node((yyvsp[-1].node));
                     }
-#line 1443 "parser.tab.c"
+#line 1474 "parser.tab.c"
     break;
 
   case 10: /* declaration: INT VARIABLE '=' expr ';'  */
-#line 340 "parser.y"
+#line 371 "parser.y"
       {
           /* var node with id */
           Node *varNode = new_var_node((yyvsp[-3].ival));
           Node *dec = new_decl_node(varNode, (yyvsp[-1].node));
           (yyval.node) = dec;
       }
-#line 1454 "parser.tab.c"
+#line 1485 "parser.tab.c"
     break;
 
   case 11: /* assignment: VARIABLE '=' expr ';'  */
-#line 351 "parser.y"
+#line 382 "parser.y"
       {
           Node *varNode = new_var_node((yyvsp[-3].ival));
           Node *asn = new_assign_node(varNode, (yyvsp[-1].node));
           (yyval.node) = asn;
       }
-#line 1464 "parser.tab.c"
+#line 1495 "parser.tab.c"
     break;
 
   case 12: /* printStatement: PRINT '(' expr ')' ';'  */
-#line 361 "parser.y"
+#line 392 "parser.y"
       {
           Node *p = new_print_node((yyvsp[-2].node));
           (yyval.node) = p;
       }
-#line 1473 "parser.tab.c"
+#line 1504 "parser.tab.c"
     break;
 
   case 13: /* IfStatement: IF '(' condition ')' ':' block ELSE ':' block END  */
-#line 370 "parser.y"
+#line 401 "parser.y"
       {
           Node *ifn = new_if_node((yyvsp[-7].node), (yyvsp[-4].node), (yyvsp[-1].node));
           (yyval.node) = ifn;
       }
-#line 1482 "parser.tab.c"
+#line 1513 "parser.tab.c"
     break;
 
   case 14: /* IfStatement: IF '(' condition ')' ':' block END  */
-#line 375 "parser.y"
+#line 406 "parser.y"
       {
           Node *ifn = new_if_node((yyvsp[-4].node), (yyvsp[-1].node), NULL);
           (yyval.node) = ifn;
       }
-#line 1491 "parser.tab.c"
+#line 1522 "parser.tab.c"
     break;
 
   case 15: /* block: stmts  */
-#line 384 "parser.y"
+#line 415 "parser.y"
       {
           (yyval.node) = (yyvsp[0].node);  /* block is simply the stmtlist produced */
       }
-#line 1499 "parser.tab.c"
+#line 1530 "parser.tab.c"
     break;
 
   case 16: /* condition: expr OP expr  */
-#line 392 "parser.y"
+#line 423 "parser.y"
       {
           /* OP is a string (lexer must strdup) */
           (yyval.node) = new_op_node((yyvsp[-1].sval), (yyvsp[-2].node), (yyvsp[0].node));
           /* We do not evaluate now; evaluation happens at run-time via eval_expr */
           free((yyvsp[-1].sval)); /* free strdup from lexer to avoid leak */
       }
-#line 1510 "parser.tab.c"
+#line 1541 "parser.tab.c"
     break;
 
   case 17: /* expr: INTEGER  */
-#line 403 "parser.y"
+#line 434 "parser.y"
       {
           (yyval.node) = new_int_node((yyvsp[0].ival));
       }
-#line 1518 "parser.tab.c"
+#line 1549 "parser.tab.c"
     break;
 
   case 18: /* expr: VARIABLE  */
-#line 407 "parser.y"
+#line 438 "parser.y"
       {
           (yyval.node) = new_var_node((yyvsp[0].ival));
       }
-#line 1526 "parser.tab.c"
+#line 1557 "parser.tab.c"
     break;
 
   case 19: /* expr: expr '+' expr  */
-#line 411 "parser.y"
+#line 442 "parser.y"
       {
           (yyval.node) = new_op_node("+", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1534 "parser.tab.c"
+#line 1565 "parser.tab.c"
     break;
 
   case 20: /* expr: expr '-' expr  */
-#line 415 "parser.y"
+#line 446 "parser.y"
       {
           (yyval.node) = new_op_node("-", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1542 "parser.tab.c"
+#line 1573 "parser.tab.c"
     break;
 
   case 21: /* expr: expr '*' expr  */
-#line 419 "parser.y"
+#line 450 "parser.y"
       {
           (yyval.node) = new_op_node("*", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1550 "parser.tab.c"
+#line 1581 "parser.tab.c"
     break;
 
   case 22: /* expr: expr '/' expr  */
-#line 423 "parser.y"
+#line 454 "parser.y"
       {
           (yyval.node) = new_op_node("/", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1558 "parser.tab.c"
+#line 1589 "parser.tab.c"
     break;
 
   case 23: /* expr: '(' expr ')'  */
-#line 427 "parser.y"
+#line 458 "parser.y"
       {
           (yyval.node) = (yyvsp[-1].node);
       }
-#line 1566 "parser.tab.c"
+#line 1597 "parser.tab.c"
     break;
 
 
-#line 1570 "parser.tab.c"
+#line 1601 "parser.tab.c"
 
       default: break;
     }
@@ -1759,7 +1790,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 432 "parser.y"
+#line 463 "parser.y"
 
 
 /* error reporting */

@@ -27,6 +27,8 @@ FILE* yyError = NULL;
 /* symbol table: variables are represented by integer IDs provided by scanner */
 int sym[256];
 
+int runtime_error = 0;
+
 /* Node kinds */
 enum {
     N_UNKNOWN = 0,
@@ -126,6 +128,14 @@ void free_tree(Node *n) {
 /* ---- printing rotated vertical tree to yytree (like doctor style) ---- */
 void printTreeVertical(Node *root, int space) {
     if (root == NULL) return;
+
+    if(root->kind == N_STMTLIST)
+    {
+        printTreeVertical(root->left, space);
+        printTreeVertical(root->right, space);
+        return;
+    }
+
     int spacing_per_level = 5;
     space += spacing_per_level;
 
@@ -142,6 +152,14 @@ void printTreeVertical(Node *root, int space) {
 /* print top-level separation */
 void print_tree_header(Node *n) {
     if (!n) return;
+
+    if(n->kind == N_STMTLIST)
+    {
+        print_tree_header(n->left);
+        print_tree_header(n->right);
+        return;
+    }
+
     printTreeVertical(n, 0);
     fprintf(yytree, "\n--------------------------------------------------\n\n");
 }
@@ -163,7 +181,7 @@ int eval_expr(Node *n) {
             if (strcmp(n->label, "-") == 0) return L - R;
             if (strcmp(n->label, "*") == 0) return L * R;
             if (strcmp(n->label, "/") == 0) {
-                if (R == 0) { yyerror("Division by zero"); return 0; }
+                if (R == 0) { yyerror("Division by zero"); runtime_error = 1; return 0; }
                 return L / R;
             }
             /* comparisons -> return 0/1 */
@@ -190,6 +208,7 @@ void execute_list(Node *list);
 /* execute a single statement node */
 void execute_stmt(Node *stmt) {
     if (!stmt) return;
+    
 
     /* Print the statement tree to tree.txt before executing (so tree.txt reflects executed statements) */
     print_tree_header(stmt);
@@ -197,6 +216,9 @@ void execute_stmt(Node *stmt) {
     switch (stmt->kind) {
         case N_DECL: {
             /* left is var node, right is expression node */
+            runtime_error = 0;
+            int v = eval_expr(stmt->right);
+            if (runtime_error) return;
             Node *varNode = stmt->left;
             Node *exprNode = stmt->right;
             int val = eval_expr(exprNode);
@@ -210,6 +232,9 @@ void execute_stmt(Node *stmt) {
             break;
         }
         case N_ASSIGN: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->right);
+            if (runtime_error) return;
             Node *varNode = stmt->left;
             Node *exprNode = stmt->right;
             int val = eval_expr(exprNode);
@@ -223,12 +248,18 @@ void execute_stmt(Node *stmt) {
             break;
         }
         case N_PRINT: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->left);
+            if (runtime_error) return;
             Node *exprNode = stmt->left;
             int val = eval_expr(exprNode);
             fprintf(yyout, "Print: %d\n", val);
             break;
         }
         case N_IF: {
+            runtime_error = 0;
+            int v = eval_expr(stmt->left);
+            if (runtime_error) return;
             Node *cond = stmt->left;
             Node *branches = stmt->right; /* branches node: left=thenList, right=elseList */
             int cond_val = eval_expr(cond);

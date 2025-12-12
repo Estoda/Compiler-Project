@@ -1,1 +1,1 @@
-Declared var[1] = 20
+Assigned var[1] = 3
