@@ -95,3 +95,72 @@ flex scanner.l
 gcc lex.yy.c parser.tab.c -o compiler
 .\compiler.exe
 ```
+
+---
+
+## 5. Usage
+
+- Run the compiler executable:
+
+  ```text
+  .\compiler.exe
+  ```
+
+- Reads `in.txt` as input.
+- Produces output in `out.txt`, `tree.txt` and `outError.txt`.
+  **Example Input:** (`in.txt`)
+
+  ```text
+  int x = 5;
+  if (x > 2):
+    print(x);
+  end
+  ```
+
+  **Example Output:**
+
+  - `out.txt`:
+
+  ```text
+  STORE var[1] = 5
+  Print: 5
+  ```
+
+  - `tree.txt`:
+
+  ```text
+
+     INTEGER(5)
+  ```
+
+dec
+
+     VAR(id=1)
+
+---
+
+     branches
+
+          print
+
+               VAR(id=1)
+
+if
+
+          INTEGER(2)
+
+     >
+
+          VAR(id=1)
+
+---
+
+print
+
+     VAR(id=1)
+
+---
+
+```
+
+```

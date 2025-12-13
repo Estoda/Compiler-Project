@@ -1,14 +1,4 @@
-int x=0;
-int y=0;
-
-if (1 == 1):
-    x = 3;
-else:
-    x = 7;
+int x = 5;
+if (x > 2):
+    print(x);
 end
-
-if (x > y):
-    print(y);
-end
-
-print(x);
