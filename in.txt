@@ -1,7 +1,14 @@
+int x=0;
+int y=0;
+
 if (1 == 1):
     x = 3;
 else:
     x = 7;
 end
 
-int y = 5/0;
+if (x > y):
+    print(y);
+end
+
+print(x);

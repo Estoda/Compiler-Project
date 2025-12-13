@@ -17,6 +17,7 @@
 
 int yylex(void);
 void yyerror(char *);
+void semantic_error(const char *msg, int line);
 
 extern int yylineno;
 extern FILE* yyin;
@@ -26,6 +27,7 @@ FILE* yyError = NULL;
 
 /* symbol table: variables are represented by integer IDs provided by scanner */
 int sym[256];
+int declared[256]; /* track declared variables */
 
 int runtime_error = 0;
 
@@ -51,6 +53,7 @@ typedef struct Node {
     int kind;
     int int_value;        /* for integer literal */
     int var_id;           /* for variable nodes */
+    int line;
 } Node;
 
 /* helpers to create nodes */
@@ -63,6 +66,7 @@ Node* new_node_kind(const char *label, int kind, Node *left, Node *right) {
     n->kind = kind;
     n->int_value = 0;
     n->var_id = -1;
+    n->line = yylineno;
     return n;
 }
 
@@ -171,8 +175,12 @@ int eval_expr(Node *n) {
         case N_INT:
             return n->int_value;
         case N_VAR:
-            if (n->var_id >=0 && n->var_id < 256) return sym[n->var_id];
-            return 0;
+            if(!declared[n->var_id]) {
+                semantic_error("Use of undeclared variable", n->line);
+                runtime_error = 1;
+                return 0;
+            }
+            return sym[n->var_id];
         case N_OP: {
             int L = eval_expr(n->left);
             int R = eval_expr(n->right);
@@ -223,6 +231,7 @@ void execute_stmt(Node *stmt) {
             Node *exprNode = stmt->right;
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
+                declared[id] = 1; /* mark as declared */
                 sym[id] = val;
                 fprintf(yyout, "STORE var[%d] = %d\n", id, val);
             } else {
@@ -239,6 +248,10 @@ void execute_stmt(Node *stmt) {
             int val = eval_expr(exprNode);
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
+                if (!declared[id]) {
+                    semantic_error("Assignment to undeclared variable", varNode->line);
+                    return;
+                }
                 sym[id] = val;
                 fprintf(yyout, "MOV var[%d] = %d\n", id, val);
             } else {
@@ -297,6 +310,11 @@ void execute_list(Node *list) {
         /* single statement */
         execute_stmt(list);
     }
+}
+
+void semantic_error(const char *msg, int line)
+{
+    fprintf(yyError, "Error: %s at line %d\n", msg, line);
 }
 
 %}
@@ -477,6 +495,13 @@ int main(void) {
     if (!yyin) { perror("open in.txt"); return 1; }
     if (!yyout) { perror("open out.txt"); return 1; }
     if (!yytree) { perror("open tree.txt"); return 1; }
+
+
+    // initialize symbol table
+    for(int i = 0; i < 256; i++) {
+        sym[i] = 0;
+        declared[i] = 0;
+    }
 
     yyparse();
 

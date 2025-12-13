@@ -87,6 +87,7 @@
 
 int yylex(void);
 void yyerror(char *);
+void semantic_error(const char *msg, int line);
 
 extern int yylineno;
 extern FILE* yyin;
@@ -96,6 +97,7 @@ FILE* yyError = NULL;
 
 /* symbol table: variables are represented by integer IDs provided by scanner */
 int sym[256];
+int declared[256]; /* track declared variables */
 
 int runtime_error = 0;
 
@@ -121,6 +123,7 @@ typedef struct Node {
     int kind;
     int int_value;        /* for integer literal */
     int var_id;           /* for variable nodes */
+    int line;
 } Node;
 
 /* helpers to create nodes */
@@ -133,6 +136,7 @@ Node* new_node_kind(const char *label, int kind, Node *left, Node *right) {
     n->kind = kind;
     n->int_value = 0;
     n->var_id = -1;
+    n->line = yylineno;
     return n;
 }
 
@@ -241,8 +245,12 @@ int eval_expr(Node *n) {
         case N_INT:
             return n->int_value;
         case N_VAR:
-            if (n->var_id >=0 && n->var_id < 256) return sym[n->var_id];
-            return 0;
+            if(!declared[n->var_id]) {
+                semantic_error("Use of undeclared variable", n->line);
+                runtime_error = 1;
+                return 0;
+            }
+            return sym[n->var_id];
         case N_OP: {
             int L = eval_expr(n->left);
             int R = eval_expr(n->right);
@@ -293,6 +301,7 @@ void execute_stmt(Node *stmt) {
             Node *exprNode = stmt->right;
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
+                declared[id] = 1; /* mark as declared */
                 sym[id] = val;
                 fprintf(yyout, "STORE var[%d] = %d\n", id, val);
             } else {
@@ -309,6 +318,10 @@ void execute_stmt(Node *stmt) {
             int val = eval_expr(exprNode);
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
+                if (!declared[id]) {
+                    semantic_error("Assignment to undeclared variable", varNode->line);
+                    return;
+                }
                 sym[id] = val;
                 fprintf(yyout, "MOV var[%d] = %d\n", id, val);
             } else {
@@ -369,8 +382,13 @@ void execute_list(Node *list) {
     }
 }
 
+void semantic_error(const char *msg, int line)
+{
+    fprintf(yyError, "Error: %s at line %d\n", msg, line);
+}
 
-#line 374 "parser.tab.c"
+
+#line 392 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -816,9 +834,9 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   334,   334,   343,   344,   357,   358,   359,   360,   361,
-     369,   380,   390,   399,   404,   413,   421,   432,   436,   440,
-     444,   448,   452,   456
+       0,   352,   352,   361,   362,   375,   376,   377,   378,   379,
+     387,   398,   408,   417,   422,   431,   439,   450,   454,   458,
+     462,   466,   470,   474
 };
 #endif
 
@@ -1411,22 +1429,22 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* program: stmts  */
-#line 335 "parser.y"
+#line 353 "parser.y"
       {
           /* execute top-level statements after parsing */
           execute_list((yyvsp[0].node));
       }
-#line 1420 "parser.tab.c"
+#line 1438 "parser.tab.c"
     break;
 
   case 3: /* stmts: %empty  */
-#line 343 "parser.y"
+#line 361 "parser.y"
                     { (yyval.node) = NULL; }
-#line 1426 "parser.tab.c"
+#line 1444 "parser.tab.c"
     break;
 
   case 4: /* stmts: stmts stmt  */
-#line 344 "parser.y"
+#line 362 "parser.y"
                     {
                         /* append stmt to list: if $1 == NULL return stmt as list node or create list node */
                         if ((yyvsp[-1].node) == NULL) {
@@ -1436,167 +1454,167 @@ yyreduce:
                             (yyval.node) = new_stmtlist_node((yyvsp[-1].node), (yyvsp[0].node));
                         }
                     }
-#line 1440 "parser.tab.c"
-    break;
-
-  case 5: /* stmt: declaration  */
-#line 357 "parser.y"
-                   { (yyval.node) = (yyvsp[0].node); }
-#line 1446 "parser.tab.c"
-    break;
-
-  case 6: /* stmt: assignment  */
-#line 358 "parser.y"
-                   { (yyval.node) = (yyvsp[0].node); }
-#line 1452 "parser.tab.c"
-    break;
-
-  case 7: /* stmt: printStatement  */
-#line 359 "parser.y"
-                     { (yyval.node) = (yyvsp[0].node); }
 #line 1458 "parser.tab.c"
     break;
 
-  case 8: /* stmt: IfStatement  */
-#line 360 "parser.y"
+  case 5: /* stmt: declaration  */
+#line 375 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
 #line 1464 "parser.tab.c"
     break;
 
+  case 6: /* stmt: assignment  */
+#line 376 "parser.y"
+                   { (yyval.node) = (yyvsp[0].node); }
+#line 1470 "parser.tab.c"
+    break;
+
+  case 7: /* stmt: printStatement  */
+#line 377 "parser.y"
+                     { (yyval.node) = (yyvsp[0].node); }
+#line 1476 "parser.tab.c"
+    break;
+
+  case 8: /* stmt: IfStatement  */
+#line 378 "parser.y"
+                   { (yyval.node) = (yyvsp[0].node); }
+#line 1482 "parser.tab.c"
+    break;
+
   case 9: /* stmt: expr ';'  */
-#line 361 "parser.y"
+#line 379 "parser.y"
                    { /* expression statement: evaluate at execution time; wrap as a print of value? we keep it as an expr node to be executed as printing its value */
                       /* We'll wrap it in a print-like node to keep execution consistent: a "printexpr" -> we'll use N_PRINT with left = expr */
                       (yyval.node) = new_print_node((yyvsp[-1].node));
                     }
-#line 1473 "parser.tab.c"
+#line 1491 "parser.tab.c"
     break;
 
   case 10: /* declaration: INT VARIABLE '=' expr ';'  */
-#line 370 "parser.y"
+#line 388 "parser.y"
       {
           /* var node with id */
           Node *varNode = new_var_node((yyvsp[-3].ival));
           Node *dec = new_decl_node(varNode, (yyvsp[-1].node));
           (yyval.node) = dec;
       }
-#line 1484 "parser.tab.c"
+#line 1502 "parser.tab.c"
     break;
 
   case 11: /* assignment: VARIABLE '=' expr ';'  */
-#line 381 "parser.y"
+#line 399 "parser.y"
       {
           Node *varNode = new_var_node((yyvsp[-3].ival));
           Node *asn = new_assign_node(varNode, (yyvsp[-1].node));
           (yyval.node) = asn;
       }
-#line 1494 "parser.tab.c"
+#line 1512 "parser.tab.c"
     break;
 
   case 12: /* printStatement: PRINT '(' expr ')' ';'  */
-#line 391 "parser.y"
+#line 409 "parser.y"
       {
           Node *p = new_print_node((yyvsp[-2].node));
           (yyval.node) = p;
       }
-#line 1503 "parser.tab.c"
+#line 1521 "parser.tab.c"
     break;
 
   case 13: /* IfStatement: IF '(' condition ')' ':' block ELSE ':' block END  */
-#line 400 "parser.y"
+#line 418 "parser.y"
       {
           Node *ifn = new_if_node((yyvsp[-7].node), (yyvsp[-4].node), (yyvsp[-1].node));
           (yyval.node) = ifn;
       }
-#line 1512 "parser.tab.c"
+#line 1530 "parser.tab.c"
     break;
 
   case 14: /* IfStatement: IF '(' condition ')' ':' block END  */
-#line 405 "parser.y"
+#line 423 "parser.y"
       {
           Node *ifn = new_if_node((yyvsp[-4].node), (yyvsp[-1].node), NULL);
           (yyval.node) = ifn;
       }
-#line 1521 "parser.tab.c"
+#line 1539 "parser.tab.c"
     break;
 
   case 15: /* block: stmts  */
-#line 414 "parser.y"
+#line 432 "parser.y"
       {
           (yyval.node) = (yyvsp[0].node);  /* block is simply the stmtlist produced */
       }
-#line 1529 "parser.tab.c"
+#line 1547 "parser.tab.c"
     break;
 
   case 16: /* condition: expr OP expr  */
-#line 422 "parser.y"
+#line 440 "parser.y"
       {
           /* OP is a string (lexer must strdup) */
           (yyval.node) = new_op_node((yyvsp[-1].sval), (yyvsp[-2].node), (yyvsp[0].node));
           /* We do not evaluate now; evaluation happens at run-time via eval_expr */
           free((yyvsp[-1].sval)); /* free strdup from lexer to avoid leak */
       }
-#line 1540 "parser.tab.c"
+#line 1558 "parser.tab.c"
     break;
 
   case 17: /* expr: INTEGER  */
-#line 433 "parser.y"
+#line 451 "parser.y"
       {
           (yyval.node) = new_int_node((yyvsp[0].ival));
       }
-#line 1548 "parser.tab.c"
+#line 1566 "parser.tab.c"
     break;
 
   case 18: /* expr: VARIABLE  */
-#line 437 "parser.y"
+#line 455 "parser.y"
       {
           (yyval.node) = new_var_node((yyvsp[0].ival));
       }
-#line 1556 "parser.tab.c"
+#line 1574 "parser.tab.c"
     break;
 
   case 19: /* expr: expr '+' expr  */
-#line 441 "parser.y"
+#line 459 "parser.y"
       {
           (yyval.node) = new_op_node("+", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1564 "parser.tab.c"
+#line 1582 "parser.tab.c"
     break;
 
   case 20: /* expr: expr '-' expr  */
-#line 445 "parser.y"
+#line 463 "parser.y"
       {
           (yyval.node) = new_op_node("-", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1572 "parser.tab.c"
+#line 1590 "parser.tab.c"
     break;
 
   case 21: /* expr: expr '*' expr  */
-#line 449 "parser.y"
+#line 467 "parser.y"
       {
           (yyval.node) = new_op_node("*", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1580 "parser.tab.c"
+#line 1598 "parser.tab.c"
     break;
 
   case 22: /* expr: expr '/' expr  */
-#line 453 "parser.y"
+#line 471 "parser.y"
       {
           (yyval.node) = new_op_node("/", (yyvsp[-2].node), (yyvsp[0].node));
       }
-#line 1588 "parser.tab.c"
+#line 1606 "parser.tab.c"
     break;
 
   case 23: /* expr: '(' expr ')'  */
-#line 457 "parser.y"
+#line 475 "parser.y"
       {
           (yyval.node) = (yyvsp[-1].node);
       }
-#line 1596 "parser.tab.c"
+#line 1614 "parser.tab.c"
     break;
 
 
-#line 1600 "parser.tab.c"
+#line 1618 "parser.tab.c"
 
       default: break;
     }
@@ -1789,7 +1807,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 462 "parser.y"
+#line 480 "parser.y"
 
 
 /* error reporting */
@@ -1808,6 +1826,13 @@ int main(void) {
     if (!yyin) { perror("open in.txt"); return 1; }
     if (!yyout) { perror("open out.txt"); return 1; }
     if (!yytree) { perror("open tree.txt"); return 1; }
+
+
+    // initialize symbol table
+    for(int i = 0; i < 256; i++) {
+        sym[i] = 0;
+        declared[i] = 0;
+    }
 
     yyparse();
 
