@@ -66,13 +66,32 @@ The custom language supports:
 ## 3. Project Structure
 
 ```text
-    Project/
-    ├─ scanner.l # FLEX lexer
-    ├─ parser.y # BISON parser & runtime
-    ├─ in.txt # Example input program
-    ├─ out.txt # Runtime output
-    ├─ tree.txt # Syntax tree output
-    ├─ outError.txt # Errors (semantic/runtime)
-    ├─ run.bat # running commands
-    ├─ README.md
+Project/
+├─ scanner.l # FLEX lexer
+├─ parser.y # BISON parser & runtime
+├─ in.txt # Example input program
+├─ out.txt # Runtime output
+├─ tree.txt # Syntax tree output
+├─ outError.txt # Errors (semantic/runtime)
+├─ run.bat # running commands
+├─ README.md
+```
+
+---
+
+## 4. Installation & Compilation
+
+make sure you have gcc, flex and bison installed.
+
+```text
+.\run.bat
+```
+
+or:
+
+```text
+bison -d parser.y
+flex scanner.l
+gcc lex.yy.c parser.tab.c -o compiler
+.\compiler.exe
 ```
