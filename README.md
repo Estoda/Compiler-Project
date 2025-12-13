@@ -126,19 +126,11 @@ gcc lex.yy.c parser.tab.c -o compiler
   Print: 5
   ```
 
-  - `tree.txt`:
+---
 
-  ```text
-         INTEGER(5)
-dec
-     VAR(id=1)
-`--------------------------------------------------`
-     INTEGER(2)
- >
-     VAR(id=1)
-branches
-...
+## 6. Notes
 
-  ```
-
-
+- Symbol table supports up to 256 variables.
+- Each variable has a unique integer ID assigned by the lexer.
+- Extra credit: Syntax tree generation to `tree.txt`.
+- Semantic/runtime errors are written immediately to `outError.txt`.
