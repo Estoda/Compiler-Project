@@ -31,7 +31,46 @@ The compiler performs:
 The custom language supports:
 
 - Variable declaration and assignment:
+
   ```text
   int x = 5;
   y = 3;
   ```
+
+- Arithmetic operations: `- + * /`
+
+- Comparison operations: `== != > >= < <=`
+
+- If-else statements with optional else block
+
+  ```text
+    if (x > y):
+        x = x + 1;
+    else:
+        y = y + 1;
+    end
+  ```
+
+- Print statements:
+  ```text
+  print(x);
+  ```
+
+**Notes:**
+
+- Variable must be declared before assignment.
+- Division by zero and usage of undeclared variables trigger semantic/runtime errors.
+
+---
+
+## 3. Project Structure
+
+Project/
+├─ scanner.l # FLEX lexer
+├─ parser.y # BISON parser & runtime
+├─ in.txt # Example input program
+├─ out.txt # Runtime output
+├─ tree.txt # Syntax tree output
+├─ outError.txt # Errors (semantic/runtime)
+├─ run.bat # running commands
+├─ README.md
