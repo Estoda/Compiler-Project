@@ -217,15 +217,14 @@ void execute_stmt(Node *stmt) {
         case N_DECL: {
             /* left is var node, right is expression node */
             runtime_error = 0;
-            int v = eval_expr(stmt->right);
+            int val = eval_expr(stmt->right);
             if (runtime_error) return;
             Node *varNode = stmt->left;
             Node *exprNode = stmt->right;
-            int val = eval_expr(exprNode);
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
                 sym[id] = val;
-                fprintf(yyout, "Declared var[%d] = %d\n", id, val);
+                fprintf(yyout, "STORE var[%d] = %d\n", id, val);
             } else {
                 yyerror("Declaration left side is not a variable");
             }
@@ -241,7 +240,7 @@ void execute_stmt(Node *stmt) {
             if (varNode->kind == N_VAR) {
                 int id = varNode->var_id;
                 sym[id] = val;
-                fprintf(yyout, "Assigned var[%d] = %d\n", id, val);
+                fprintf(yyout, "MOV var[%d] = %d\n", id, val);
             } else {
                 yyerror("Assignment left side is not a variable");
             }
