@@ -129,38 +129,16 @@ gcc lex.yy.c parser.tab.c -o compiler
   - `tree.txt`:
 
   ```text
-
-     INTEGER(5)
-
+         INTEGER(5)
 dec
-
      VAR(id=1)
-
 --------------------------------------------------
-
-
-     branches
-
-          print
-
-               VAR(id=1)
-
-if
-
-          INTEGER(2)
-
-     >
-
-          VAR(id=1)
-
---------------------------------------------------
-
-
-print
-
+     INTEGER(2)
+ >
      VAR(id=1)
-
---------------------------------------------------
-
+branches
+...
 
   ```
+
+
