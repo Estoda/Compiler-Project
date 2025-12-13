@@ -65,12 +65,14 @@ The custom language supports:
 
 ## 3. Project Structure
 
-Project/
-├─ scanner.l # FLEX lexer
-├─ parser.y # BISON parser & runtime
-├─ in.txt # Example input program
-├─ out.txt # Runtime output
-├─ tree.txt # Syntax tree output
-├─ outError.txt # Errors (semantic/runtime)
-├─ run.bat # running commands
-├─ README.md
+```text
+    Project/
+    ├─ scanner.l # FLEX lexer
+    ├─ parser.y # BISON parser & runtime
+    ├─ in.txt # Example input program
+    ├─ out.txt # Runtime output
+    ├─ tree.txt # Syntax tree output
+    ├─ outError.txt # Errors (semantic/runtime)
+    ├─ run.bat # running commands
+    ├─ README.md
+```
